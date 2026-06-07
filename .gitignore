@@ -1,0 +1,19 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+caddy
+
+# Test artifacts
+*.test
+*.out
+coverage.txt
+
+# Build output
+/dist/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
