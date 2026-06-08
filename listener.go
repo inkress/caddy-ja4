@@ -23,7 +23,7 @@ type ListenerWrapper struct{}
 func (ListenerWrapper) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "caddy.listeners.ja4",
-		New: func() caddy.Module { return ListenerWrapper{} },
+		New: func() caddy.Module { return new(ListenerWrapper) },
 	}
 }
 
