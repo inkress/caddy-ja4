@@ -65,6 +65,13 @@ func (p *peekConn) Read(b []byte) (int, error) {
 }
 
 func (p *peekConn) computeJA4() {
+	// Defense in depth: this is the ONLY code that touches attacker-controlled bytes before TLS
+	// terminates them. ParseRecord is written to be panic-free (every read is bounds-checked), but
+	// a single missed edge must never crash the connection goroutine — a malformed or hostile
+	// ClientHello can at worst yield no fingerprint, never a panic. The peek itself is already
+	// bounded (16 KiB) so there is no allocation/CPU-exhaustion vector here either.
+	defer func() { _ = recover() }()
+
 	// TLS record header is 5 bytes: type(1) version(2) length(2). Peek the header, then
 	// the full record. Peek never advances the reader, so the bytes remain for TLS.
 	hdr, err := p.br.Peek(5)
