@@ -6,6 +6,7 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -13,9 +14,10 @@ func init() {
 }
 
 // Handler is a Caddy HTTP middleware (`http.handlers.ja4`) that looks up the JA4 computed
-// by the listener wrapper for this connection and sets it as a request header before the
-// request is proxied upstream. Absent fingerprint → header simply not set, so upstreams
-// can treat a missing X-JA4 as neutral.
+// by the listener wrapper for this connection and (a) sets it as a request header before the
+// request is proxied upstream and (b) attaches it to the access-log entry as the `ja4` field.
+// Absent fingerprint → neither is set, so upstreams and log consumers treat a missing JA4 as
+// neutral.
 type Handler struct {
 	// HeaderName overrides the injected header (default "X-JA4").
 	HeaderName string `json:"header_name,omitempty"`
@@ -41,8 +43,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	name := h.header()
 	// Never trust a client-supplied value — we are the authority for this header.
 	r.Header.Del(name)
-	if ja4, ok := shared.take(r.RemoteAddr); ok && ja4 != "" {
+	// peek (not take): one TLS handshake serves many HTTP requests under keep-alive / HTTP/2,
+	// and every one of them should carry the connection's fingerprint. The registry's TTL sweep
+	// reclaims the entry once the connection goes idle.
+	if ja4, ok := shared.peek(r.RemoteAddr); ok && ja4 != "" {
 		r.Header.Set(name, ja4)
+		// Request-header mutations made here are NOT reflected in Caddy's access log (it records
+		// the request as received). A log/observability consumer — as opposed to an upstream —
+		// only sees JA4 if we attach it as an explicit extra log field.
+		if extra, ok := r.Context().Value(caddyhttp.ExtraLogFieldsCtxKey).(*caddyhttp.ExtraLogFields); ok {
+			extra.Add(zap.String("ja4", ja4))
+		}
 	}
 	return next.ServeHTTP(w, r)
 }

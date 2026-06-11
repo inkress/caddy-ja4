@@ -35,8 +35,7 @@ func (r *registry) put(addr, ja4 string) {
 	r.mu.Unlock()
 }
 
-// take returns the JA4 for an address and removes it (one request per peeked handshake
-// is the common case; keep-alive reuse simply re-peeks nothing and falls back to absent).
+// take returns the JA4 for an address and removes it.
 func (r *registry) take(addr string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -44,6 +43,15 @@ func (r *registry) take(addr string) (string, bool) {
 	if ok {
 		delete(r.m, addr)
 	}
+	return e.ja4, ok
+}
+
+// peek returns the JA4 for an address without removing it, so every request on a kept-alive
+// or multiplexed (HTTP/2) connection sees the same fingerprint. The TTL sweep handles cleanup.
+func (r *registry) peek(addr string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.m[addr]
 	return e.ja4, ok
 }
 
